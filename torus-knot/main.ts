@@ -156,6 +156,7 @@ let bindGroup = device.createBindGroup({
     entries: [{binding: 0, resource: {buffer: uniformBuffer}}],
 });
 
+//#region Camera and orbit controls
 // let animator: number = 0.0
 
 // create orbit
@@ -184,30 +185,122 @@ function getCamera(): { position: Vec3Arg; up: Vec3Arg } {
 }
 
 // camera orbit controls for keyboard
-const angleStep = 0.05;
-window.addEventListener('keydown', (event) => {
-    switch (event.key) {
-        case 'ArrowLeft':
-            orbit.yaw -= angleStep;
-            break;
-        case 'ArrowRight':
-            orbit.yaw += angleStep;
-            break;
-        case 'ArrowUp':
-            orbit.elevation = (orbit.elevation + angleStep) % (2 * Math.PI)
-            break;
-        case 'ArrowDown':
-            orbit.elevation = (orbit.elevation - angleStep) % (2 * Math.PI)
-            break;
-        default:
-            return;
-    }
+const pressedKeys = new Set<string>();
+const arrowKeys = new Set([
+    'ArrowLeft',
+    'ArrowRight',
+    'ArrowUp',
+    'ArrowDown',
+]);
 
+// Let keyboard controls apply when the canvas has focus.
+canvas.tabIndex = 0;
+
+canvas.addEventListener('keydown', (event) => {
+    if (!arrowKeys.has(event.key)) return;
+
+    pressedKeys.add(event.key);
     event.preventDefault();
 });
 
-function frame() {
-    // add handlers for mouse control
+canvas.addEventListener('keyup', (event) => {
+    if (!arrowKeys.has(event.key)) return;
+
+    pressedKeys.delete(event.key);
+    event.preventDefault();
+});
+
+canvas.addEventListener('blur', () => pressedKeys.clear());
+window.addEventListener('blur', () => pressedKeys.clear());
+
+const keyboardSpeed = 1.5; // radians per second
+let previousTime: number | undefined;
+
+function updateKeyboardOrbit(time: number) {
+    const deltaTime = previousTime === undefined
+        ? 0
+        : Math.min((time - previousTime) / 1000, 0.1);
+
+    previousTime = time;
+
+    let horizontal =
+        Number(pressedKeys.has('ArrowRight')) -
+        Number(pressedKeys.has('ArrowLeft'));
+
+    let vertical =
+        Number(pressedKeys.has('ArrowUp')) -
+        Number(pressedKeys.has('ArrowDown'));
+
+    // calculating the squareroot of both movements
+    const length = Math.hypot(horizontal, vertical);
+    // divide by squareroot to normalize to 1 again
+    if (length > 0) {
+        horizontal /= length;
+        vertical /= length;
+    }
+
+    orbit.yaw += horizontal * keyboardSpeed * deltaTime;
+    orbit.elevation += vertical * keyboardSpeed * deltaTime;
+}
+//#endregion
+
+//#region Mouse and trackpad controls
+const dragSensitivity = 0.005; // radians per CSS pixel
+
+let activePointerId: number | undefined;
+let previousX = 0;
+let previousY = 0;
+
+canvas.style.touchAction = 'none';
+
+canvas.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0 || activePointerId !== undefined) return;
+
+    canvas.focus({ preventScroll: true });
+
+    activePointerId = event.pointerId;
+    previousX = event.clientX;
+    previousY = event.clientY;
+
+    canvas.setPointerCapture(event.pointerId);
+});
+
+canvas.addEventListener('pointermove', (event) => {
+    if (event.pointerId !== activePointerId) return;
+
+    const deltaX = event.clientX - previousX;
+    const deltaY = event.clientY - previousY;
+
+    previousX = event.clientX;
+    previousY = event.clientY;
+
+    orbit.yaw -= deltaX * dragSensitivity;
+    orbit.elevation += deltaY * dragSensitivity;
+});
+
+function finishDrag(event: PointerEvent) {
+    if (event.pointerId !== activePointerId) return;
+
+    activePointerId = undefined;
+
+    if (canvas.hasPointerCapture(event.pointerId)) {
+        canvas.releasePointerCapture(event.pointerId);
+    }
+}
+
+canvas.addEventListener('pointerup', finishDrag);
+canvas.addEventListener('pointercancel', finishDrag);
+
+canvas.addEventListener('lostpointercapture', (event) => {
+    if (event.pointerId === activePointerId) {
+        activePointerId = undefined;
+    }
+});
+//#endregion
+
+function frame(time: number) {
+    updateKeyboardOrbit(time);
+    
     torusKnotUI.fpsTick();
     if (torusKnotUI.haveParamsChanged()) {
       buffers = createTorusKnotBuffer()
