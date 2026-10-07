@@ -156,7 +156,55 @@ let bindGroup = device.createBindGroup({
     entries: [{binding: 0, resource: {buffer: uniformBuffer}}],
 });
 
-let animator: number = 0.0
+// let animator: number = 0.0
+
+// create orbit
+const orbit = { yaw: 0, elevation: 0, radius: 40 };
+const target: Vec3Arg = [0, 0, 0];
+
+// camera projection
+function getCamera(): { position: Vec3Arg; up: Vec3Arg } {
+    const sinElevation = Math.sin(orbit.elevation);
+    const cosElevation = Math.cos(orbit.elevation);
+    const sinYaw = Math.sin(orbit.yaw);
+    const cosYaw = Math.cos(orbit.yaw);
+
+    return {
+        position: [
+            orbit.radius * cosElevation * cosYaw,
+            orbit.radius * cosElevation * sinYaw,
+            orbit.radius * sinElevation,
+        ],
+        up: [
+            -sinElevation * cosYaw,
+            -sinElevation * sinYaw,
+            cosElevation,
+        ],
+    };
+}
+
+// camera orbit controls for keyboard
+const angleStep = 0.05;
+window.addEventListener('keydown', (event) => {
+    switch (event.key) {
+        case 'ArrowLeft':
+            orbit.yaw -= angleStep;
+            break;
+        case 'ArrowRight':
+            orbit.yaw += angleStep;
+            break;
+        case 'ArrowUp':
+            orbit.elevation = (orbit.elevation + angleStep) % (2 * Math.PI)
+            break;
+        case 'ArrowDown':
+            orbit.elevation = (orbit.elevation - angleStep) % (2 * Math.PI)
+            break;
+        default:
+            return;
+    }
+
+    event.preventDefault();
+});
 
 function frame() {
     // add handlers for mouse control
@@ -170,12 +218,16 @@ function frame() {
       });
     }
 
+    // unpack two values from camera projection
+    const { position, up } = getCamera();
+
     const viewProj = mat4.multiply(
         mat4.perspective(Math.PI / 4, canvas.width / canvas.height, 0.1, 100),
-        mat4.lookAt([Math.cos(animator) * 40, 0, Math.sin(animator) * 40], [0, 0, 0], [0, 1, 0]),
+        // mat4.lookAt([Math.cos(animator) * 40, 0, Math.sin(animator) * 40], [0, 0, 0], [0, 1, 0]),
+        mat4.lookAt(position, target, up)
     );
 
-    animator += torusKnotUI.params.speed
+    // animator += torusKnotUI.params.speed
 
     uniformView.set({viewProjection: viewProj});
     device.queue.writeBuffer(uniformBuffer, 0, uniformView.arrayBuffer);
