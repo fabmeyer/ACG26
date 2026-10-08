@@ -10,7 +10,47 @@ import {initWebGPU} from './webgpu-init.ts';
 import shaderCode from './shader.wgsl?raw';
 import {TorusKnotUI} from './torusKnotUI.ts';
 
+//#region Initialize torusknot UI
 const torusKnotUI = new TorusKnotUI(10000, 100);
+// Create a SVG
+const svg = document.createElementNS(
+    'http://www.w3.org/2000/svg',
+    'svg',
+);
+svg.setAttribute('viewBox', '0 0 160 160');
+Object.assign(svg.style, {
+    width: '160px',
+    height: '160px',
+    display: 'block',
+    background: 'transparent',
+    touchAction: 'none',
+});
+torusKnotUI.trackballHost.appendChild(svg);
+// draw the SVG for the trackball
+type Axis = 'x' | 'y' | 'z';
+
+const ringDefinitions: { axis: Axis; color: string }[] = [
+    { axis: 'x', color: '#ff5555' },
+    { axis: 'y', color: '#55dd77' },
+    { axis: 'z', color: '#5599ff' },
+];
+
+const rings = ringDefinitions.map(({ axis, color }) => {
+    const path = document.createElementNS(
+        'http://www.w3.org/2000/svg',
+        'path',
+    );
+
+    path.setAttribute('fill', 'none');
+    path.setAttribute('stroke', color);
+    path.setAttribute('stroke-width', '2');
+    path.setAttribute('stroke-opacity', '0.65');
+
+    svg.appendChild(path);
+
+    return { axis, path };
+});
+//#endregion
 
 const canvas = document.getElementById('gpuCanvas') as HTMLCanvasElement;
 const {device, context, format} = await initWebGPU(canvas);
@@ -157,34 +197,95 @@ let bindGroup = device.createBindGroup({
 });
 
 //#region Camera and orbit controls
-// let animator: number = 0.0
 
-// create orbit
-const orbit = { yaw: 0, elevation: 0, radius: 40 };
+// create orbit and two unit vectors
+const orbit = { radius: 40 };
 const target: Vec3Arg = [0, 0, 0];
+const worldZ: Vec3Arg = [0, 0, 1];
+
+// back = right middle finger back
+let cameraBack: Vec3Arg = [1, 0, 0];
+// up = right index finger up
+let cameraUp: Vec3Arg = [0, 0, 1];
+// right = right thumb right (normal of the vector product of the other two)
+function getCameraRight(): Vec3Arg {
+    return vec3.normalize(vec3.cross(cameraUp, cameraBack));
+}
+
+function rotateVector(
+    value: Vec3Arg,
+    axis: Vec3Arg,
+    angle: number,
+): Vec3Arg {
+    const n = vec3.normalize(axis);
+    const c = Math.cos(angle);
+    const s = Math.sin(angle);
+
+    return vec3.add(
+        vec3.add(
+            vec3.scale(value, c),
+            vec3.scale(vec3.cross(n, value), s),
+        ),
+        vec3.scale(n, vec3.dot(n, value) * (1 - c)),
+    );
+}
+
+function rotateCamera(axis: Vec3Arg, angle: number) {
+    cameraBack = vec3.normalize(rotateVector(cameraBack, axis, angle));
+
+    const rotatedUp = rotateVector(cameraUp, axis, angle);
+    const right = vec3.normalize(vec3.cross(rotatedUp, cameraBack));
+    cameraUp = vec3.normalize(vec3.cross(cameraBack, right));
+}
+
+// trackball ringPoints
+// Ring,        Plane,  Fixed coordinate
+// X, red	    YZ	    X = 0
+// Y, green	    XZ	    Y = 0
+// Z, blue	    XY	    Z = 0
+function ringPoint(axis: Axis, angle: number): Vec3Arg {
+    const c = Math.cos(angle);
+    const s = Math.sin(angle);
+
+    if (axis === 'x') return [0, c, s];
+    if (axis === 'y') return [s, 0, c];
+    return [c, s, 0];
+}
+
+// update trackball (projection)
+function updateTrackball() {
+    const right = getCameraRight();
+    const sampleCount = 96;
+    const center = 80;
+    const radius = 58;
+
+    for (const ring of rings) {
+        const commands: string[] = [];
+
+        for (let i = 0; i < sampleCount; i++) {
+            const angle = i * 2 * Math.PI / sampleCount;
+            const point = ringPoint(ring.axis, angle);
+
+            const x = center + radius * vec3.dot(point, right);
+            const y = center - radius * vec3.dot(point, cameraUp);
+
+            commands.push(`${i === 0 ? 'M' : 'L'} ${x} ${y}`);
+        }
+
+        ring.path.setAttribute('d', commands.join(' ') + ' Z');
+    }
+}
 
 // camera projection
 function getCamera(): { position: Vec3Arg; up: Vec3Arg } {
-    const sinElevation = Math.sin(orbit.elevation);
-    const cosElevation = Math.cos(orbit.elevation);
-    const sinYaw = Math.sin(orbit.yaw);
-    const cosYaw = Math.cos(orbit.yaw);
-
     return {
-        position: [
-            orbit.radius * cosElevation * cosYaw,
-            orbit.radius * cosElevation * sinYaw,
-            orbit.radius * sinElevation,
-        ],
-        up: [
-            -sinElevation * cosYaw,
-            -sinElevation * sinYaw,
-            cosElevation,
-        ],
+        position: vec3.add(target, vec3.scale(cameraBack, orbit.radius)),
+        up: cameraUp,
     };
 }
+//#endregion
 
-// camera orbit controls for keyboard
+//#region Camera orbit controls for keyboard
 const pressedKeys = new Set<string>();
 const arrowKeys = new Set([
     'ArrowLeft',
@@ -239,8 +340,8 @@ function updateKeyboardOrbit(time: number) {
         vertical /= length;
     }
 
-    orbit.yaw += horizontal * keyboardSpeed * deltaTime;
-    orbit.elevation += vertical * keyboardSpeed * deltaTime;
+    rotateCamera(worldZ, horizontal * keyboardSpeed * deltaTime);
+    rotateCamera(getCameraRight(), -vertical * keyboardSpeed * deltaTime);
 }
 //#endregion
 
@@ -274,8 +375,8 @@ canvas.addEventListener('pointermove', (event) => {
     previousX = event.clientX;
     previousY = event.clientY;
 
-    orbit.yaw -= deltaX * dragSensitivity;
-    orbit.elevation += deltaY * dragSensitivity;
+    rotateCamera(worldZ, -deltaX * dragSensitivity);
+    rotateCamera(getCameraRight(), -deltaY * dragSensitivity);
 });
 
 function finishDrag(event: PointerEvent) {
@@ -300,6 +401,7 @@ canvas.addEventListener('lostpointercapture', (event) => {
 
 function frame(time: number) {
     updateKeyboardOrbit(time);
+    updateTrackball();
     
     torusKnotUI.fpsTick();
     if (torusKnotUI.haveParamsChanged()) {

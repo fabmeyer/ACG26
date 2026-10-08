@@ -21,6 +21,8 @@ export class TorusKnotUI {
     private prevMilli: number;
     private fpsBindingText;
     private vertexBinding;
+    // trackball UI
+    public readonly trackballHost: HTMLDivElement;
 
     constructor(maxSegments: number, maxTubeSegments: number) {
         this.maxSegments = maxSegments;
@@ -116,6 +118,18 @@ export class TorusKnotUI {
             this.params.vertices = this.params.segments * this.params.tubeSegments
             this.vertexBinding.refresh()
         });
+
+        this.trackballHost = document.createElement('div');
+
+        // trackball constructor settings
+        Object.assign(this.trackballHost.style, {
+            display: 'flex',
+            justifyContent: 'center',
+            padding: '8px 0',
+            background: 'transparent',
+        });
+
+        this.pane.element.appendChild(this.trackballHost);
     }
 
     haveParamsChanged() {
@@ -136,4 +150,6 @@ export class TorusKnotUI {
         this.fpsBindingText.refresh();
         this.prevMilli = currentMilli;
     }
+
+    
 }
