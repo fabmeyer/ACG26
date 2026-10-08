@@ -10,17 +10,18 @@ import {initWebGPU} from './webgpu-init.ts';
 import shaderCode from './shader.wgsl?raw';
 import {TorusKnotUI} from './torusKnotUI.ts';
 
-//#region Initialize torusknot UI
+//#region Initialize torusknot UI & trackball UI
 const torusKnotUI = new TorusKnotUI(10000, 100);
 // Create a SVG
 const svg = document.createElementNS(
     'http://www.w3.org/2000/svg',
     'svg',
 );
-svg.setAttribute('viewBox', '0 0 160 160');
+svg.setAttribute('viewBox', '0 0 200 200');
+
 Object.assign(svg.style, {
-    width: '160px',
-    height: '160px',
+    width: '200px',
+    height: '200px',
     display: 'block',
     background: 'transparent',
     touchAction: 'none',
@@ -35,6 +36,42 @@ const ringDefinitions: { axis: Axis; color: string }[] = [
     { axis: 'z', color: '#5599ff' },
 ];
 
+let hoveredAxis: Axis | undefined;
+const worldAxes: Record<Axis, Vec3Arg> = {
+    x: [1, 0, 0],
+    y: [0, 1, 0],
+    z: [0, 0, 1],
+};
+
+let ringDrag: {
+    pointerId: number;
+    axis: Axis;
+    previousX: number;
+    previousY: number;
+} | undefined;
+
+function highlightRing(axis: Axis | undefined) {
+    hoveredAxis = ringDrag?.axis ?? axis;
+
+    for (const ring of rings) {
+        const highlighted = ring.axis === hoveredAxis;
+
+        ring.path.setAttribute(
+            'stroke-width',
+            highlighted ? '4' : '2',
+        );
+
+        ring.path.setAttribute(
+            'stroke-opacity',
+            highlighted ? '1' : '0.65',
+        );
+    }
+
+    svg.style.cursor = ringDrag !== undefined
+        ? 'grabbing'
+        : hoveredAxis === undefined ? 'default' : 'grab';
+}
+
 const rings = ringDefinitions.map(({ axis, color }) => {
     const path = document.createElementNS(
         'http://www.w3.org/2000/svg',
@@ -46,9 +83,103 @@ const rings = ringDefinitions.map(({ axis, color }) => {
     path.setAttribute('stroke-width', '2');
     path.setAttribute('stroke-opacity', '0.65');
 
-    svg.appendChild(path);
+    // invisble path for the hover of the rings
+    const hitPath = document.createElementNS(
+        'http://www.w3.org/2000/svg',
+        'path',
+    );
 
-    return { axis, path };
+    hitPath.setAttribute('fill', 'none');
+    hitPath.setAttribute('stroke', 'transparent');
+    // has a wider stroke for easier navigation
+    hitPath.setAttribute('stroke-width', '12');
+    hitPath.setAttribute('pointer-events', 'stroke');
+
+    path.setAttribute('pointer-events', 'none');
+
+    svg.appendChild(path);
+    svg.appendChild(hitPath);
+
+    return { axis, path, hitPath };
+});
+
+for (const ring of rings) {
+    ring.hitPath.addEventListener('pointerenter', () => {
+        highlightRing(ring.axis);
+    });
+
+    ring.hitPath.addEventListener('pointerleave', () => {
+        if (hoveredAxis === ring.axis) {
+            highlightRing(undefined);
+        }
+    });
+
+    ring.hitPath.addEventListener('pointerdown', (event) => {
+        if (event.button !== 0 || ringDrag !== undefined) return;
+
+        event.preventDefault();
+
+        ringDrag = {
+            pointerId: event.pointerId,
+            axis: ring.axis,
+            previousX: event.clientX,
+            previousY: event.clientY,
+        };
+
+        svg.setPointerCapture(event.pointerId);
+        highlightRing(ring.axis);
+    });
+}
+
+function finishRingDrag() {
+    if (!ringDrag) return;
+
+    const pointerId = ringDrag.pointerId;
+    ringDrag = undefined;
+
+    if (svg.hasPointerCapture(pointerId)) {
+        svg.releasePointerCapture(pointerId);
+    }
+
+    highlightRing(undefined);
+}
+
+function finishRingPointer(event: PointerEvent) {
+    if (event.pointerId === ringDrag?.pointerId) {
+        finishRingDrag();
+    }
+}
+
+window.addEventListener('blur', finishRingDrag);
+svg.addEventListener('pointerup', finishRingPointer);
+svg.addEventListener('pointercancel', finishRingPointer);
+svg.addEventListener('lostpointercapture', finishRingPointer);
+svg.addEventListener('pointermove', (event) => {
+    if (!ringDrag || event.pointerId !== ringDrag.pointerId) return;
+
+    const deltaX = event.clientX - ringDrag.previousX;
+    const deltaY = event.clientY - ringDrag.previousY;
+
+    ringDrag.previousX = event.clientX;
+    ringDrag.previousY = event.clientY;
+
+    const axis = worldAxes[ringDrag.axis];
+    const direction = vec3.cross(axis, cameraBack);
+
+    const screenX = vec3.dot(direction, getCameraRight());
+    const screenY = -vec3.dot(direction, cameraUp);
+    const length = Math.hypot(screenX, screenY);
+
+    const movement = length > 0.1
+        ? (deltaX * screenX + deltaY * screenY) / length
+        : Math.abs(deltaY) > Math.abs(deltaX)
+            ? deltaY
+            : deltaX;
+
+    rotateCamera(axis, -movement * 0.01);
+});
+svg.addEventListener('pointerleave', () => {
+    highlightRing(undefined);
 });
 //#endregion
 
@@ -254,10 +385,11 @@ function ringPoint(axis: Axis, angle: number): Vec3Arg {
 
 // update trackball (projection)
 function updateTrackball() {
+    // draws a new trackball with every new frame
     const right = getCameraRight();
-    const sampleCount = 96;
-    const center = 80;
-    const radius = 58;
+    const sampleCount = 64;
+    const center = 100;
+    const radius = 90;
 
     for (const ring of rings) {
         const commands: string[] = [];
@@ -272,7 +404,10 @@ function updateTrackball() {
             commands.push(`${i === 0 ? 'M' : 'L'} ${x} ${y}`);
         }
 
-        ring.path.setAttribute('d', commands.join(' ') + ' Z');
+        const d = commands.join(' ') + ' Z';
+
+        ring.path.setAttribute('d', d);
+        ring.hitPath.setAttribute('d', d);
     }
 }
 
@@ -323,6 +458,7 @@ function updateKeyboardOrbit(time: number) {
         : Math.min((time - previousTime) / 1000, 0.1);
 
     previousTime = time;
+    if (ringDrag !== undefined) return;
 
     let horizontal =
         Number(pressedKeys.has('ArrowRight')) -
@@ -374,6 +510,7 @@ canvas.addEventListener('pointermove', (event) => {
 
     previousX = event.clientX;
     previousY = event.clientY;
+    if (ringDrag !== undefined) return;
 
     rotateCamera(worldZ, -deltaX * dragSensitivity);
     rotateCamera(getCameraRight(), -deltaY * dragSensitivity);
