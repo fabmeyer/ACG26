@@ -15,7 +15,6 @@ export class TorusKnotUI {
         tubeRadius: number,
         fps: number;
         vertices: number;
-        speed: number;
     };
     private fpsBinding;
     private prevMilli: number;
@@ -40,7 +39,6 @@ export class TorusKnotUI {
             tubeRadius: 0.5,
             fps: 0,
             vertices: 1000*30,
-            speed: 0.01,
         }
 
         let paramsFolder = this.pane.addFolder({title: 'Torus Knot Parameters'})
@@ -82,17 +80,6 @@ export class TorusKnotUI {
             label: 'Tube Radius',
             min: 0.01,
             max: 5.0,
-        })
-        paramsFolder.addBinding(this.params, 'speed', {
-            label: 'Animation Speed',
-            options: {
-                None: 0.0,
-                Lowest: 0.001,
-                Lower: 0.005,
-                Normal: 0.01,
-                Higher: 0.05,
-                Highest: 0.1,
-            },
         })
         this.fpsBinding = this.pane.addBinding(this.params, 'fps', {
             label: 'FPS',
