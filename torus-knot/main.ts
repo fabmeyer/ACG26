@@ -344,6 +344,7 @@ function getCameraRight(): Vec3Arg {
     return vec3.normalize(vec3.cross(cameraUp, cameraBack));
 }
 
+// helpers
 function rotateVector(
     value: Vec3Arg,
     axis: Vec3Arg,
@@ -362,6 +363,15 @@ function rotateVector(
     );
 }
 
+// zoom camera
+const MIN_RADIUS = 5;   // keep the near plane (0.1) from clipping the tube
+const MAX_RADIUS = 80;  // keep inside the far plane (100)
+function zoomBy(steps: number) {    // steps > 0 -> zoom in
+    const factor = Math.exp(-steps * 0.1);
+    orbit.radius = Math.min(MAX_RADIUS, Math.max(MIN_RADIUS, orbit.radius * factor));
+}
+
+// rotate camera
 function rotateCamera(axis: Vec3Arg, angle: number) {
     cameraBack = vec3.normalize(rotateVector(cameraBack, axis, angle));
 
@@ -383,7 +393,6 @@ function ringPoint(axis: Axis, angle: number): Vec3Arg {
     if (axis === 'y') return [s, 0, c];
     return [c, s, 0];
 }
-
 // update trackball (projection)
 function updateTrackball() {
     // draws a new trackball with every new frame
@@ -394,7 +403,6 @@ function updateTrackball() {
 
     for (const ring of rings) {
         const commands: string[] = [];
-
         for (let i = 0; i < sampleCount; i++) {
             const angle = i * 2 * Math.PI / sampleCount;
             const point = ringPoint(ring.axis, angle);
@@ -404,9 +412,7 @@ function updateTrackball() {
 
             commands.push(`${i === 0 ? 'M' : 'L'} ${x} ${y}`);
         }
-
         const d = commands.join(' ') + ' Z';
-
         ring.path.setAttribute('d', d);
         ring.hitPath.setAttribute('d', d);
     }
@@ -422,6 +428,7 @@ function getCamera(): { position: Vec3Arg; up: Vec3Arg } {
 //#endregion
 
 //#region Camera orbit controls for keyboard
+// define keys
 const pressedKeys = new Set<string>();
 const arrowKeys = new Set([
     'ArrowLeft',
@@ -429,10 +436,38 @@ const arrowKeys = new Set([
     'ArrowUp',
     'ArrowDown',
 ]);
+const zoomKeys = new Set(['Comma', 'Period']);
 
 // Let keyboard controls apply when the canvas has focus.
 canvas.tabIndex = 0;
 
+// keyboard controls for zoom
+canvas.addEventListener('keydown', (event) => {
+    if (arrowKeys.has(event.key)) {
+        pressedKeys.add(event.key);
+    } else if (zoomKeys.has(event.code) && event.shiftKey) {
+        pressedKeys.add(event.code);
+    } else {
+        return;
+    }
+
+    event.preventDefault();
+});
+
+canvas.addEventListener('keyup', (event) => {
+    if (arrowKeys.has(event.key)) {
+        pressedKeys.delete(event.key);
+    } else if (zoomKeys.has(event.code)) {
+        // no shiftKey check: Shift may already be released
+        pressedKeys.delete(event.code);
+    } else {
+        return;
+    }
+
+    event.preventDefault();
+});
+
+// keyboard controls for rotation
 canvas.addEventListener('keydown', (event) => {
     if (!arrowKeys.has(event.key)) return;
 
@@ -453,12 +488,21 @@ window.addEventListener('blur', () => pressedKeys.clear());
 const keyboardSpeed = 1.5; // radians per second
 let previousTime: number | undefined;
 
+// updateKeyboardOrbit
 function updateKeyboardOrbit(time: number) {
     const deltaTime = previousTime === undefined
         ? 0
         : Math.min((time - previousTime) / 1000, 0.1);
 
     previousTime = time;
+
+    // keyboard control for zoom
+    const zoom =
+    Number(pressedKeys.has('Period')) -   // shift + . -> zoom in
+    Number(pressedKeys.has('Comma'));     // shift + , -> zoom out
+
+    if (zoom !== 0) zoomBy(zoom * 8 * deltaTime);   // ~8 steps/second
+
     if (ringDrag !== undefined) return;
 
     // keyboard control for horizontal rotation
@@ -494,6 +538,20 @@ let previousY = 0;
 
 canvas.style.touchAction = 'none';
 
+// mouse controls for zoom
+canvas.addEventListener('wheel', (event) => {
+    event.preventDefault();
+
+    const scale = event.deltaMode === 1 ? 16    // DOM_DELTA_LINE
+                : event.deltaMode === 2 ? 400   // DOM_DELTA_PAGE
+                : 1;                            // DOM_DELTA_PIXEL
+
+    // wheel up -> negative deltaY -> zoom in
+    zoomBy(-event.deltaY * scale / 100);
+}, { passive: false });
+
+// mouse controls for rotation
+// mouse button down
 canvas.addEventListener('pointerdown', (event) => {
     if (event.button !== 0 || activePointerId !== undefined) return;
 
@@ -506,6 +564,7 @@ canvas.addEventListener('pointerdown', (event) => {
     canvas.setPointerCapture(event.pointerId);
 });
 
+// mouse button down + moving
 canvas.addEventListener('pointermove', (event) => {
     if (event.pointerId !== activePointerId) return;
 
@@ -520,6 +579,7 @@ canvas.addEventListener('pointermove', (event) => {
     rotateCamera(getCameraRight(), -deltaY * dragSensitivity);
 });
 
+// call this function at the end of a movement
 function finishDrag(event: PointerEvent) {
     if (event.pointerId !== activePointerId) return;
 
