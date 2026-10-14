@@ -691,8 +691,6 @@ function frame(time: number) {
         mat4.lookAt(cam.position, cam.target, cam.up),
     );
 
-    // animator += torusKnotUI.params.speed
-
     uniformView.set({viewProjection: viewProj});
     device.queue.writeBuffer(uniformBuffer, 0, uniformView.arrayBuffer);
 
