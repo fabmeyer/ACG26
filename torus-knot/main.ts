@@ -434,7 +434,6 @@ function getCamera(): { position: Vec3Arg; up: Vec3Arg } {
 
 // mode 'ride': ride along the knot's center line
 const ride = new KnotRide();
-const RIDE_SPEED = 4; // in world units per second
 let previousRideTime: number | undefined;
 //#endregion
 
@@ -507,6 +506,9 @@ function updateKeyboardOrbit(time: number) {
 
     previousTime = time;
 
+    // ride mode is controlled by the speed slider only: keys must not move the hidden orbit camera
+    if (torusKnotUI.params.mode === 'ride') return;
+
     // keyboard control for zoom
     const zoom =
     Number(pressedKeys.has('Period')) -   // shift + . -> zoom in
@@ -553,6 +555,9 @@ canvas.style.touchAction = 'none';
 canvas.addEventListener('wheel', (event) => {
     event.preventDefault();
 
+    // ride mode: no zoom (the page still must not scroll, hence preventDefault above)
+    if (torusKnotUI.params.mode === 'ride') return;
+
     const scale = event.deltaMode === 1 ? 16    // DOM_DELTA_LINE
                 : event.deltaMode === 2 ? 400   // DOM_DELTA_PAGE
                 : 1;                            // DOM_DELTA_PIXEL
@@ -585,6 +590,9 @@ canvas.addEventListener('pointermove', (event) => {
     previousX = event.clientX;
     previousY = event.clientY;
     if (ringDrag !== undefined) return;
+
+    // ride mode is controlled by the speed slider only: dragging must not move the hidden orbit camera
+    if (torusKnotUI.params.mode === 'ride') return;
 
     rotateCamera(worldZ, -deltaX * dragSensitivity);
     rotateCamera(getCameraRight(), -deltaY * dragSensitivity);
@@ -646,7 +654,8 @@ function frame(time: number) {
     }
     previousRideTime = time;
     if (riding) {
-        ride.move(k, RIDE_SPEED * rideDelta);
+        // speed comes from the slider in Navigation → Ride
+        ride.move(k, k.rideSpeed * rideDelta);
     }
 
     // camera from the active navigation mode
