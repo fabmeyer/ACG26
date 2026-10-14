@@ -336,7 +336,7 @@ const orbit = { radius: 40 };
 const target: Vec3Arg = [0, 0, 0];
 const worldZ: Vec3Arg = [0, 0, 1];
 
-// perspective projection parameters
+// perspective projection
 const FIELD_OF_VIEW = Math.PI / 4;   // 45° vertical
 const NEAR_PLANE = 0.1;              // closer geometry is clipped away
 const FAR_PLANE = 100;               // geometry further away is clipped away
@@ -614,7 +614,13 @@ canvas.addEventListener('lostpointercapture', (event) => {
 //#region Run application
 function frame(time: number) {
     updateKeyboardOrbit(time);
-    updateTrackball();
+    // the trackball rings are only shown (and redrawn) in arcball mode
+    if (torusKnotUI.params.mode === 'arcball') {
+        torusKnotUI.trackballHost.style.display = 'flex';
+        updateTrackball();
+    } else {
+        torusKnotUI.trackballHost.style.display = 'none';
+    }
     
     torusKnotUI.fpsTick();
     if (torusKnotUI.haveParamsChanged()) {
