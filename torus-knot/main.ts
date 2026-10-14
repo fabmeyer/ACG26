@@ -186,6 +186,7 @@ svg.addEventListener('pointerleave', () => {
 const canvas = document.getElementById('gpuCanvas') as HTMLCanvasElement;
 const {device, context, format} = await initWebGPU(canvas);
 
+//#region Torus knot geometry, buffer and texture
 function generate_torus_knot_vertices(p: number, q: number, segments: number, tubeSegments: number, outerRadius: number, innerRadius: number, tubeRadius: number) {
     let deltaT: number = 2 * Math.PI / segments
     let deltaTube: number = 2 * Math.PI / tubeSegments
@@ -326,9 +327,9 @@ let bindGroup = device.createBindGroup({
     layout: pipeline.getBindGroupLayout(0),
     entries: [{binding: 0, resource: {buffer: uniformBuffer}}],
 });
+//#endregion
 
 //#region Camera and orbit controls
-
 // create orbit and two unit vectors
 const orbit = { radius: 40 };
 const target: Vec3Arg = [0, 0, 0];
@@ -460,10 +461,12 @@ function updateKeyboardOrbit(time: number) {
     previousTime = time;
     if (ringDrag !== undefined) return;
 
+    // keyboard control for horizontal rotation
     let horizontal =
-        Number(pressedKeys.has('ArrowRight')) -
-        Number(pressedKeys.has('ArrowLeft'));
+        Number(pressedKeys.has('ArrowLeft')) -
+        Number(pressedKeys.has('ArrowRight'));
 
+    // keyboard control for vertical rotation
     let vertical =
         Number(pressedKeys.has('ArrowUp')) -
         Number(pressedKeys.has('ArrowDown'));
@@ -476,8 +479,9 @@ function updateKeyboardOrbit(time: number) {
         vertical /= length;
     }
 
+    // actual camera rotation functions
     rotateCamera(worldZ, horizontal * keyboardSpeed * deltaTime);
-    rotateCamera(getCameraRight(), -vertical * keyboardSpeed * deltaTime);
+    rotateCamera(getCameraRight(), vertical * keyboardSpeed * deltaTime);
 }
 //#endregion
 
@@ -536,6 +540,7 @@ canvas.addEventListener('lostpointercapture', (event) => {
 });
 //#endregion
 
+//#region Run application
 function frame(time: number) {
     updateKeyboardOrbit(time);
     updateTrackball();
@@ -591,3 +596,4 @@ function frame(time: number) {
 }
 
 requestAnimationFrame(frame);
+//#endregion
