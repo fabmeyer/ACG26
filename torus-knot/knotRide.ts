@@ -31,10 +31,7 @@ function knotOutward(k: KnotShape, t: number): Vec3Arg {
 }
 
 export class KnotRide {
-    t = 0;       // position parameter for torus knot center line
-    roll = 0;    // rotation around the direction of travel (radians)
-    yaw = 0;     // look left / right
-    pitch = 0;   // look up / down
+    t = 0;
 
     move(k: KnotShape, distance: number) {
         const steps = Math.max(1, Math.ceil(Math.abs(distance) / 0.05));
@@ -45,27 +42,10 @@ export class KnotRide {
         }
     }
 
-    look(dYaw: number, dPitch: number) {
-        this.yaw = Math.max(-1.4, Math.min(1.4, this.yaw + dYaw));
-        this.pitch = Math.max(-1.4, Math.min(1.4, this.pitch + dPitch));
-    }
-
     camera(k: KnotShape): {position: Vec3Arg; target: Vec3Arg; up: Vec3Arg} {
         const position = knotCentre(k, this.t);
         const forward = vec3.normalize(knotVelocity(k, this.t));
-        const outward = knotOutward(k, this.t);
-        const side = vec3.cross(forward, outward);
-
-        // apply roll: turn the up vector around the direction of travel
-        const up = vec3.add(vec3.scale(outward, Math.cos(this.roll)), vec3.scale(side, Math.sin(this.roll)));
-        const right = vec3.cross(forward, up);
-
-        // apply yaw and pitch to the viewing direction
-        const view = vec3.add(
-            vec3.scale(vec3.add(vec3.scale(forward, Math.cos(this.yaw)), vec3.scale(right, Math.sin(this.yaw))),
-                Math.cos(this.pitch)),
-            vec3.scale(up, Math.sin(this.pitch)),
-        );
-        return {position, target: vec3.add(position, view), up};
+        const up = knotOutward(k, this.t);
+        return {position, target: vec3.add(position, forward), up};
     }
 }
