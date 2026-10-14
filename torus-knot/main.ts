@@ -13,7 +13,9 @@ import {KnotRide} from './knotRide.ts';
 import {SurfaceWalk} from './surfaceWalk.ts';
 
 //#region Initialize torusknot UI & trackball UI
-const torusKnotUI = new TorusKnotUI(10000, 100);
+const MAX_SEGMENTS = 10000;
+const MAX_TUBE_SEGMENTS = 100;
+const torusKnotUI = new TorusKnotUI(MAX_SEGMENTS, MAX_TUBE_SEGMENTS);
 // Create a SVG
 const svg = document.createElementNS(
     'http://www.w3.org/2000/svg',
@@ -85,7 +87,7 @@ const rings = ringDefinitions.map(({ axis, color }) => {
     path.setAttribute('stroke-width', '2');
     path.setAttribute('stroke-opacity', '0.65');
 
-    // invisble path for the hover of the rings
+    // invisible path for the hover of the rings
     const hitPath = document.createElementNS(
         'http://www.w3.org/2000/svg',
         'path',
@@ -201,7 +203,7 @@ function generate_torus_knot_vertices(p: number, q: number, segments: number, tu
     for (let t_i: number = 0; t_i < segments; t_i++) {
         let t: number = t_i * deltaT;
 
-        // Get the tuber center point
+        // Get the tube center point
         let center: Vec3Arg = [
             (outerRadius + innerRadius * Math.cos(q * t)) * Math.cos(p * t),
             (outerRadius + innerRadius * Math.cos(q * t)) * Math.sin(p * t),
@@ -217,9 +219,6 @@ function generate_torus_knot_vertices(p: number, q: number, segments: number, tu
                 Math.sin(p * t) * Math.cos(q * t),
                 Math.sin(q * t)
             ];
-            // tangent of the centre curve = derivative of center(t)
-            // (fixed: the first term must be scaled by p·(R + r·cos qt), not the whole sum;
-            //  the old version tilted the tube's rings and did not match surfaceWalk.ts)
             let tPrime: Vec3Arg = vec3.normalize(vec3.add(
                 vec3.scale([-Math.sin(p * t), Math.cos(p * t), 0.0], p * (outerRadius + innerRadius * Math.cos(q * t))),
                 vec3.scale([-Math.sin(q * t) * Math.cos(p * t), -Math.sin(q * t) * Math.sin(p * t), Math.cos(q * t)], q * innerRadius),
@@ -238,7 +237,6 @@ function generate_torus_knot_vertices(p: number, q: number, segments: number, tu
             colors.push(...vec3.scale([Math.cos(t) + 1.0, Math.cos(s) + 1.0, Math.sin(t) + 1.0], 0.5))
 
             // Calculate the index of the 4 corners and create the two phases
-
             let a: number = t_i * tubeSegments + s_i;
             let b: number = t_i * tubeSegments + (s_i + 1) % tubeSegments;
             let d: number = ((t_i + 1) % segments) * tubeSegments + s_i;
