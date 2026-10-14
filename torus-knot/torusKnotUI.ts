@@ -1,5 +1,7 @@
 import {Pane} from 'tweakpane'
 
+export type NavigationMode = 'arcball' | 'walk' | 'ride';
+
 export class TorusKnotUI {
     private paramsChanged: boolean;
     private maxSegments: number;
@@ -15,6 +17,7 @@ export class TorusKnotUI {
         tubeRadius: number,
         fps: number;
         vertices: number;
+        mode: String;
     };
     private fpsBinding;
     private prevMilli: number;
@@ -39,9 +42,11 @@ export class TorusKnotUI {
             tubeRadius: 0.5,
             fps: 0,
             vertices: 1000*30,
+            mode: 'arcball',
         }
 
         let paramsFolder = this.pane.addFolder({title: 'Torus Knot Parameters'})
+        const navigationFolder = this.pane.addFolder({title: 'Navigation'});
         paramsFolder.addBinding(this.params, 'p', {
             label: 'P',
             step: 1,
@@ -104,6 +109,14 @@ export class TorusKnotUI {
             this.paramsChanged = true
             this.params.vertices = this.params.segments * this.params.tubeSegments
             this.vertexBinding.refresh()
+        })
+        navigationFolder.addBinding(this.params, 'mode', {
+            label: 'Mode',
+            options: {
+                'Arcball / turntable': 'arcball',
+                'Walk on surface': 'walk',
+                'Ride inside tube': 'ride',
+            },
         });
 
         this.trackballHost = document.createElement('div');
