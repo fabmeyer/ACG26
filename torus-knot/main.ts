@@ -13,19 +13,25 @@ import {KnotRide} from './knotRide.ts';
 import {SurfaceWalk} from './surfaceWalk.ts';
 
 //#region Initialize torusknot UI & trackball UI
-const MAX_SEGMENTS = 10000;
-const MAX_TUBE_SEGMENTS = 100;
+const MAX_SEGMENTS = 10000;        // rings along the knot
+const MAX_TUBE_SEGMENTS = 100;     // vertices around each ring
 const torusKnotUI = new TorusKnotUI(MAX_SEGMENTS, MAX_TUBE_SEGMENTS);
+
+// size of the trackball widget (CSS pixels and SVG coordinates)
+const TRACKBALL_SIZE = 200;
+// space between the rings and the edge, so thick (hovered) rings aren't cut off
+const TRACKBALL_MARGIN = 10;
+
 // Create a SVG
 const svg = document.createElementNS(
     'http://www.w3.org/2000/svg',
     'svg',
 );
-svg.setAttribute('viewBox', '0 0 200 200');
+svg.setAttribute('viewBox', `0 0 ${TRACKBALL_SIZE} ${TRACKBALL_SIZE}`);
 
 Object.assign(svg.style, {
-    width: '200px',
-    height: '200px',
+    width: `${TRACKBALL_SIZE}px`,
+    height: `${TRACKBALL_SIZE}px`,
     display: 'block',
     background: 'transparent',
     touchAction: 'none',
@@ -87,7 +93,7 @@ const rings = ringDefinitions.map(({ axis, color }) => {
     path.setAttribute('stroke-width', '2');
     path.setAttribute('stroke-opacity', '0.65');
 
-    // invisible path for the hover of the rings
+    // invisble path for the hover of the rings
     const hitPath = document.createElementNS(
         'http://www.w3.org/2000/svg',
         'path',
@@ -203,7 +209,7 @@ function generate_torus_knot_vertices(p: number, q: number, segments: number, tu
     for (let t_i: number = 0; t_i < segments; t_i++) {
         let t: number = t_i * deltaT;
 
-        // Get the tube center point
+        // Get the tuber center point
         let center: Vec3Arg = [
             (outerRadius + innerRadius * Math.cos(q * t)) * Math.cos(p * t),
             (outerRadius + innerRadius * Math.cos(q * t)) * Math.sin(p * t),
@@ -237,6 +243,7 @@ function generate_torus_knot_vertices(p: number, q: number, segments: number, tu
             colors.push(...vec3.scale([Math.cos(t) + 1.0, Math.cos(s) + 1.0, Math.sin(t) + 1.0], 0.5))
 
             // Calculate the index of the 4 corners and create the two phases
+
             let a: number = t_i * tubeSegments + s_i;
             let b: number = t_i * tubeSegments + (s_i + 1) % tubeSegments;
             let d: number = ((t_i + 1) % segments) * tubeSegments + s_i;
@@ -406,8 +413,8 @@ function updateTrackball() {
     // draws a new trackball with every new frame
     const right = getCameraRight();
     const sampleCount = 64;
-    const center = 100;
-    const radius = 90;
+    const center = TRACKBALL_SIZE / 2;
+    const radius = TRACKBALL_SIZE / 2 - TRACKBALL_MARGIN;
 
     for (const ring of rings) {
         const commands: string[] = [];
