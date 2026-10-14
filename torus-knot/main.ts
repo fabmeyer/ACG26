@@ -9,6 +9,7 @@ import {
 import {initWebGPU} from './webgpu-init.ts';
 import shaderCode from './shader.wgsl?raw';
 import {TorusKnotUI} from './torusKnotUI.ts';
+import {KnotRide} from './knotRide.ts';
 
 //#region Initialize torusknot UI & trackball UI
 const torusKnotUI = new TorusKnotUI(10000, 100);
@@ -425,6 +426,11 @@ function getCamera(): { position: Vec3Arg; up: Vec3Arg } {
         up: cameraUp,
     };
 }
+
+// mode 'ride': ride along the knot's center line
+const ride = new KnotRide();
+const RIDE_SPEED = 4; // in world units per second
+let previousRideTime: number | undefined;
 //#endregion
 
 //#region Camera orbit controls for keyboard
@@ -615,13 +621,39 @@ function frame(time: number) {
       });
     }
 
-    // unpack two values from camera projection
-    const { position, up } = getCamera();
+    const k = torusKnotUI.params;
+    const riding = k.mode === 'ride';
+
+    // advance the ride at a constant speed (time-based, capped at 0.1 s per frame)
+    let rideDelta: number;
+    if (previousRideTime === undefined) {
+        // very first frame: nothing to compare with yet, so don't move
+        rideDelta = 0;
+    } else {
+        // capped at 0.1 s so the ride doesn't jump after the tab was in the background
+        rideDelta = Math.min((time - previousRideTime) / 1000, 0.1);
+    }
+    previousRideTime = time;
+    if (riding) {
+        ride.move(k, RIDE_SPEED * rideDelta);
+    }
+
+    // camera from the active navigation mode
+    let cam: { position: Vec3Arg; target: Vec3Arg; up: Vec3Arg };
+    if (riding) {
+        cam = ride.camera(k);
+    } else {
+        const orbitCam = getCamera();
+        cam = {
+            position: orbitCam.position,
+            target: target,          // the orbit camera always looks at the origin
+            up: orbitCam.up,
+        };
+    }
 
     const viewProj = mat4.multiply(
         mat4.perspective(Math.PI / 4, canvas.width / canvas.height, 0.1, 100),
-        // mat4.lookAt([Math.cos(animator) * 40, 0, Math.sin(animator) * 40], [0, 0, 0], [0, 1, 0]),
-        mat4.lookAt(position, target, up)
+        mat4.lookAt(cam.position, cam.target, cam.up),
     );
 
     // animator += torusKnotUI.params.speed
