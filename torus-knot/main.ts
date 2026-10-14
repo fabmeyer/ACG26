@@ -336,6 +336,11 @@ const orbit = { radius: 40 };
 const target: Vec3Arg = [0, 0, 0];
 const worldZ: Vec3Arg = [0, 0, 1];
 
+// perspective projection parameters
+const FIELD_OF_VIEW = Math.PI / 4;   // 45° vertical
+const NEAR_PLANE = 0.1;              // closer geometry is clipped away
+const FAR_PLANE = 100;               // geometry further away is clipped away
+
 // back = right middle finger back
 let cameraBack: Vec3Arg = [1, 0, 0];
 // up = right index finger up
@@ -365,8 +370,8 @@ function rotateVector(
 }
 
 // zoom camera
-const MIN_RADIUS = 5;   // keep the near plane (0.1) from clipping the tube
-const MAX_RADIUS = 80;  // keep inside the far plane (100)
+const MIN_RADIUS = 5;                 // stay far enough out that the near plane doesn't clip the knot
+const MAX_RADIUS = 0.8 * FAR_PLANE;   // leave room for the knot (radius ≈ 15) inside the far plane
 function zoomBy(steps: number) {    // steps > 0 -> zoom in
     const factor = Math.exp(-steps * 0.1);
     orbit.radius = Math.min(MAX_RADIUS, Math.max(MIN_RADIUS, orbit.radius * factor));
@@ -652,7 +657,7 @@ function frame(time: number) {
     }
 
     const viewProj = mat4.multiply(
-        mat4.perspective(Math.PI / 4, canvas.width / canvas.height, 0.1, 100),
+        mat4.perspective(FIELD_OF_VIEW, canvas.width / canvas.height, NEAR_PLANE, FAR_PLANE),
         mat4.lookAt(cam.position, cam.target, cam.up),
     );
 
