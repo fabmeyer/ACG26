@@ -10,6 +10,7 @@ import {initWebGPU} from './webgpu-init.ts';
 import shaderCode from './shader.wgsl?raw';
 import {TorusKnotUI} from './torusKnotUI.ts';
 import {KnotRide} from './knotRide.ts';
+import {SurfaceWalk} from './surfaceWalk.ts';
 
 //#region Initialize torusknot UI & trackball UI
 const torusKnotUI = new TorusKnotUI(10000, 100);
@@ -216,9 +217,12 @@ function generate_torus_knot_vertices(p: number, q: number, segments: number, tu
                 Math.sin(p * t) * Math.cos(q * t),
                 Math.sin(q * t)
             ];
-            let tPrime: Vec3Arg = vec3.normalize(vec3.scale(
-                vec3.add([-Math.sin(p * t), Math.cos(p * t), 0.0], vec3.scale([-Math.sin(q * t) * Math.cos(p * t), -Math.sin(q * t) * Math.sin(p * t), Math.cos(q * t)], q * innerRadius)),
-                p * (outerRadius + innerRadius * Math.cos(q * t))
+            // tangent of the centre curve = derivative of center(t)
+            // (fixed: the first term must be scaled by p·(R + r·cos qt), not the whole sum;
+            //  the old version tilted the tube's rings and did not match surfaceWalk.ts)
+            let tPrime: Vec3Arg = vec3.normalize(vec3.add(
+                vec3.scale([-Math.sin(p * t), Math.cos(p * t), 0.0], p * (outerRadius + innerRadius * Math.cos(q * t))),
+                vec3.scale([-Math.sin(q * t) * Math.cos(p * t), -Math.sin(q * t) * Math.sin(p * t), Math.cos(q * t)], q * innerRadius),
             ));
             let bPrime: Vec3Arg = vec3.cross(tPrime, nPrime);
             let normal: number[] = vec3.add(
@@ -336,7 +340,7 @@ const orbit = { radius: 40 };
 const target: Vec3Arg = [0, 0, 0];
 const worldZ: Vec3Arg = [0, 0, 1];
 
-// perspective projection
+// perspective projection parameters
 const FIELD_OF_VIEW = Math.PI / 4;   // 45° vertical
 const NEAR_PLANE = 0.1;              // closer geometry is clipped away
 const FAR_PLANE = 100;               // geometry further away is clipped away
@@ -434,7 +438,13 @@ function getCamera(): { position: Vec3Arg; up: Vec3Arg } {
 
 // mode 'ride': ride along the knot's center line
 const ride = new KnotRide();
-let previousRideTime: number | undefined;
+
+// mode 'walk': walk on the surface of the tube
+const walker = new SurfaceWalk();
+const WALK_DIRECTION = 0;
+
+// time of the previous frame, for moving the ride / walker at a constant speed
+let previousNavigationTime: number | undefined;
 //#endregion
 
 //#region Camera orbit controls for keyboard
@@ -506,8 +516,8 @@ function updateKeyboardOrbit(time: number) {
 
     previousTime = time;
 
-    // ride mode is controlled by the speed slider only: keys must not move the hidden orbit camera
-    if (torusKnotUI.params.mode === 'ride') return;
+    // ride and walk are controlled by sliders only: keys must not move the hidden orbit camera
+    if (torusKnotUI.params.mode !== 'arcball') return;
 
     // keyboard control for zoom
     const zoom =
@@ -555,8 +565,7 @@ canvas.style.touchAction = 'none';
 canvas.addEventListener('wheel', (event) => {
     event.preventDefault();
 
-    // ride mode: no zoom (the page still must not scroll, hence preventDefault above)
-    if (torusKnotUI.params.mode === 'ride') return;
+    if (torusKnotUI.params.mode !== 'arcball') return;
 
     const scale = event.deltaMode === 1 ? 16    // DOM_DELTA_LINE
                 : event.deltaMode === 2 ? 400   // DOM_DELTA_PAGE
@@ -591,8 +600,8 @@ canvas.addEventListener('pointermove', (event) => {
     previousY = event.clientY;
     if (ringDrag !== undefined) return;
 
-    // ride mode is controlled by the speed slider only: dragging must not move the hidden orbit camera
-    if (torusKnotUI.params.mode === 'ride') return;
+    // ride and walk are controlled by sliders only: dragging must not move the hidden orbit camera
+    if (torusKnotUI.params.mode !== 'arcball') return;
 
     rotateCamera(worldZ, -deltaX * dragSensitivity);
     rotateCamera(getCameraRight(), -deltaY * dragSensitivity);
@@ -642,26 +651,32 @@ function frame(time: number) {
 
     const k = torusKnotUI.params;
     const riding = k.mode === 'ride';
+    const walking = k.mode === 'walk';
 
-    // advance the ride at a constant speed (time-based, capped at 0.1 s per frame)
-    let rideDelta: number;
-    if (previousRideTime === undefined) {
+    // seconds since the previous frame, to move at a constant speed
+    let navigationDelta: number;
+    if (previousNavigationTime === undefined) {
         // very first frame: nothing to compare with yet, so don't move
-        rideDelta = 0;
+        navigationDelta = 0;
     } else {
-        // capped at 0.1 s so the ride doesn't jump after the tab was in the background
-        rideDelta = Math.min((time - previousRideTime) / 1000, 0.1);
+        // capped at 0.1 s so nothing jumps after the tab was in the background
+        navigationDelta = Math.min((time - previousNavigationTime) / 1000, 0.1);
     }
-    previousRideTime = time;
+    previousNavigationTime = time;
+
+    // speed comes from the sliders in the Navigation section
     if (riding) {
-        // speed comes from the slider in Navigation → Ride
-        ride.move(k, k.rideSpeed * rideDelta);
+        ride.move(k, k.rideSpeed * navigationDelta);
+    } else if (walking) {
+        walker.move(k, k.walkSpeed * navigationDelta, WALK_DIRECTION);
     }
 
     // camera from the active navigation mode
     let cam: { position: Vec3Arg; target: Vec3Arg; up: Vec3Arg };
     if (riding) {
         cam = ride.camera(k);
+    } else if (walking) {
+        cam = walker.camera(k, WALK_DIRECTION);
     } else {
         const orbitCam = getCamera();
         cam = {
