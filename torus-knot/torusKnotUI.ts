@@ -17,7 +17,7 @@ export class TorusKnotUI {
         tubeRadius: number,
         fps: number;
         vertices: number;
-        mode: String;
+        mode: NavigationMode;
     };
     private fpsBinding;
     private prevMilli: number;
@@ -45,8 +45,8 @@ export class TorusKnotUI {
             mode: 'arcball',
         }
 
-        let paramsFolder = this.pane.addFolder({title: 'Torus Knot Parameters'})
-        const navigationFolder = this.pane.addFolder({title: 'Navigation'});
+        //#region 1. Torus knot parameters (changes rebuild the mesh)
+        const paramsFolder = this.pane.addFolder({title: 'Torus Knot Parameters'})
         paramsFolder.addBinding(this.params, 'p', {
             label: 'P',
             step: 1,
@@ -86,30 +86,15 @@ export class TorusKnotUI {
             min: 0.01,
             max: 5.0,
         })
-        this.fpsBinding = this.pane.addBinding(this.params, 'fps', {
-            label: 'FPS',
-            view: 'graph',
-            readonly: true,
-            min: 0,
-            max: 144,
-        })
-        this.fpsBindingText = this.pane.addBinding(this.params, 'fps', {
-            label: 'FPS',
-            readonly: true,
-            min: 0,
-            max: 144,
-            format: v => v.toString(),
-        })
-        this.vertexBinding = this.pane.addBinding(this.params, 'vertices', {
-            label: 'Vertices',
-            readonly: true,
-            format: v => v.toString(),
-        })
         paramsFolder.on('change', () => {
             this.paramsChanged = true
             this.params.vertices = this.params.segments * this.params.tubeSegments
             this.vertexBinding.refresh()
         })
+        //#endregion
+
+        //#region 2. Navigation (separate folder: switching modes does not rebuild the mesh)
+        const navigationFolder = this.pane.addFolder({title: 'Navigation'});
         navigationFolder.addBinding(this.params, 'mode', {
             label: 'Mode',
             options: {
@@ -119,17 +104,42 @@ export class TorusKnotUI {
             },
         });
 
+        // The trackball rings are a navigation control, so they live inside this folder
+        // (and fold away with it). '.tp-fldv_c' is Tweakpane's folder content element.
         this.trackballHost = document.createElement('div');
-
-        // trackball constructor settings
         Object.assign(this.trackballHost.style, {
             display: 'flex',
             justifyContent: 'center',
             padding: '8px 0',
             background: 'transparent',
         });
+        const navigationContent =
+            navigationFolder.element.querySelector('.tp-fldv_c') ?? navigationFolder.element;
+        navigationContent.appendChild(this.trackballHost);
+        //#endregion
 
-        this.pane.element.appendChild(this.trackballHost);
+        //#region 3. Rendering information (read-only)
+        const renderingFolder = this.pane.addFolder({title: 'Rendering'});
+        this.fpsBinding = renderingFolder.addBinding(this.params, 'fps', {
+            label: 'FPS',
+            view: 'graph',
+            readonly: true,
+            min: 0,
+            max: 144,
+        })
+        this.fpsBindingText = renderingFolder.addBinding(this.params, 'fps', {
+            label: 'FPS',
+            readonly: true,
+            min: 0,
+            max: 144,
+            format: v => v.toString(),
+        })
+        this.vertexBinding = renderingFolder.addBinding(this.params, 'vertices', {
+            label: 'Vertices',
+            readonly: true,
+            format: v => v.toString(),
+        })
+        //#endregion
     }
 
     haveParamsChanged() {
@@ -150,6 +160,4 @@ export class TorusKnotUI {
         this.fpsBindingText.refresh();
         this.prevMilli = currentMilli;
     }
-
-    
 }
