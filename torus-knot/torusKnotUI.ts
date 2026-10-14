@@ -18,6 +18,7 @@ export class TorusKnotUI {
         fps: number;
         vertices: number;
         mode: NavigationMode;
+        rideSpeed: number;   // world units per second (negative = backwards)
     };
     private fpsBinding;
     private prevMilli: number;
@@ -43,6 +44,7 @@ export class TorusKnotUI {
             fps: 0,
             vertices: 1000*30,
             mode: 'arcball',
+            rideSpeed: 4,
         }
 
         //#region 1. Torus knot parameters (changes rebuild the mesh)
@@ -95,7 +97,7 @@ export class TorusKnotUI {
 
         //#region 2. Navigation (separate folder: switching modes does not rebuild the mesh)
         const navigationFolder = this.pane.addFolder({title: 'Navigation'});
-        navigationFolder.addBinding(this.params, 'mode', {
+        const modeBinding = navigationFolder.addBinding(this.params, 'mode', {
             label: 'Mode',
             options: {
                 'Arcball / turntable': 'arcball',
@@ -103,6 +105,20 @@ export class TorusKnotUI {
                 'Ride inside tube': 'ride',
             },
         });
+
+        // ride speed: a plain slider in this folder, only shown while the ride mode is selected
+        const rideSpeedBinding = navigationFolder.addBinding(this.params, 'rideSpeed', {
+            label: 'Ride Speed',
+            min: -10,
+            max: 20,
+            step: 0.5,
+        });
+
+        const updateRideSpeedVisibility = () => {
+            rideSpeedBinding.hidden = this.params.mode !== 'ride';
+        };
+        modeBinding.on('change', updateRideSpeedVisibility);
+        updateRideSpeedVisibility();   // correct state at startup
 
         // The trackball rings are a navigation control, so they live inside this folder
         // (and fold away with it). '.tp-fldv_c' is Tweakpane's folder content element.
