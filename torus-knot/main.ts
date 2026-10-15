@@ -11,6 +11,7 @@ import shaderCode from './shader.wgsl?raw';
 import {TorusKnotUI} from './torusKnotUI.ts';
 import {KnotRide} from './knotRide.ts';
 import {SurfaceWalk} from './surfaceWalk.ts';
+import {type KnotShape, knotCentre, tubeNormal} from './knotGeometry.ts';
 
 //#region Initialize torusknot UI & trackball UI
 const MAX_SEGMENTS = 10000;        // rings along the knot
@@ -93,7 +94,7 @@ const rings = ringDefinitions.map(({ axis, color }) => {
     path.setAttribute('stroke-width', '2');
     path.setAttribute('stroke-opacity', '0.65');
 
-    // invisble path for the hover of the rings
+    // invisible path for the hover of the rings
     const hitPath = document.createElementNS(
         'http://www.w3.org/2000/svg',
         'path',
@@ -197,7 +198,7 @@ const canvas = document.getElementById('gpuCanvas') as HTMLCanvasElement;
 const {device, context, format} = await initWebGPU(canvas);
 
 //#region Torus knot geometry, buffer and texture
-function generate_torus_knot_vertices(p: number, q: number, segments: number, tubeSegments: number, outerRadius: number, innerRadius: number, tubeRadius: number) {
+function generate_torus_knot_vertices(shape: KnotShape, segments: number, tubeSegments: number) {
     let deltaT: number = 2 * Math.PI / segments
     let deltaTube: number = 2 * Math.PI / tubeSegments
 
@@ -209,41 +210,22 @@ function generate_torus_knot_vertices(p: number, q: number, segments: number, tu
     for (let t_i: number = 0; t_i < segments; t_i++) {
         let t: number = t_i * deltaT;
 
-        // Get the tuber center point
-        let center: Vec3Arg = [
-            (outerRadius + innerRadius * Math.cos(q * t)) * Math.cos(p * t),
-            (outerRadius + innerRadius * Math.cos(q * t)) * Math.sin(p * t),
-            innerRadius * Math.sin(q * t)
-        ];
+        // point on the knot's centre line (the middle of the tube)
+        const center = knotCentre(shape, t);
 
         for (let s_i: number = 0; s_i < tubeSegments; s_i++) {
             let s: number = s_i * deltaTube;
 
-            // Calculate the normal
-            let nPrime: Vec3Arg = [
-                Math.cos(p * t) * Math.cos(q * t),
-                Math.sin(p * t) * Math.cos(q * t),
-                Math.sin(q * t)
-            ];
-            let tPrime: Vec3Arg = vec3.normalize(vec3.add(
-                vec3.scale([-Math.sin(p * t), Math.cos(p * t), 0.0], p * (outerRadius + innerRadius * Math.cos(q * t))),
-                vec3.scale([-Math.sin(q * t) * Math.cos(p * t), -Math.sin(q * t) * Math.sin(p * t), Math.cos(q * t)], q * innerRadius),
-            ));
-            let bPrime: Vec3Arg = vec3.cross(tPrime, nPrime);
-            let normal: number[] = vec3.add(
-                vec3.scale(nPrime, Math.cos(s)),
-                vec3.scale(bPrime, Math.sin(s)),
-            );
-            normal = vec3.normalize(normal);
+            // direction from the centre line to the tube surface
+            const normal = tubeNormal(shape, t, s);
 
             vertexPositions.push(
-                ...vec3.add(center, vec3.scale(normal, tubeRadius))
+                ...vec3.add(center, vec3.scale(normal, shape.tubeRadius))
             )
             normals.push(...normal);
             colors.push(...vec3.scale([Math.cos(t) + 1.0, Math.cos(s) + 1.0, Math.sin(t) + 1.0], 0.5))
 
-            // Calculate the index of the 4 corners and create the two phases
-
+            // calculate the index of the 4 corners and create the two phases
             let a: number = t_i * tubeSegments + s_i;
             let b: number = t_i * tubeSegments + (s_i + 1) % tubeSegments;
             let d: number = ((t_i + 1) % segments) * tubeSegments + s_i;
@@ -260,7 +242,8 @@ function generate_torus_knot_vertices(p: number, q: number, segments: number, tu
 }
 
 function createTorusKnotBuffer() {
-    let data = generate_torus_knot_vertices(torusKnotUI.params.p, torusKnotUI.params.q, torusKnotUI.params.segments, torusKnotUI.params.tubeSegments, torusKnotUI.params.outerRadius, torusKnotUI.params.innerRadius, torusKnotUI.params.tubeRadius)
+    const params = torusKnotUI.params;
+    let data = generate_torus_knot_vertices(params, params.segments, params.tubeSegments)
 
     let result = createBuffersAndAttributesFromArrays(device, {
         position: {
