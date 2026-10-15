@@ -13,32 +13,32 @@ import {KnotRide} from './knotRide.ts';
 import {SurfaceWalk} from './surfaceWalk.ts';
 import {type KnotShape, knotCentre, tubeNormal} from './knotGeometry.ts';
 
-//#region Initialize torusknot UI & trackball UI
+//#region Initialize torusknot UI & arcball UI
 const MAX_SEGMENTS = 10000;        // rings along the knot
 const MAX_TUBE_SEGMENTS = 100;     // vertices around each ring
 const torusKnotUI = new TorusKnotUI(MAX_SEGMENTS, MAX_TUBE_SEGMENTS);
 
-// size of the trackball widget (CSS pixels and SVG coordinates)
-const TRACKBALL_SIZE = 200;
+// size of the arcball widget (CSS pixels and SVG coordinates)
+const ARCBALL_SIZE = 200;
 // space between the rings and the edge, so thick (hovered) rings aren't cut off
-const TRACKBALL_MARGIN = 10;
+const ARCBALL_MARGIN = 10;
 
-// Create a SVG
+// Create a SVG for the arcball control
 const svg = document.createElementNS(
     'http://www.w3.org/2000/svg',
     'svg',
 );
-svg.setAttribute('viewBox', `0 0 ${TRACKBALL_SIZE} ${TRACKBALL_SIZE}`);
+svg.setAttribute('viewBox', `0 0 ${ARCBALL_SIZE} ${ARCBALL_SIZE}`);
 
 Object.assign(svg.style, {
-    width: `${TRACKBALL_SIZE}px`,
-    height: `${TRACKBALL_SIZE}px`,
+    width: `${ARCBALL_SIZE}px`,
+    height: `${ARCBALL_SIZE}px`,
     display: 'block',
     background: 'transparent',
     touchAction: 'none',
 });
-torusKnotUI.trackballHost.appendChild(svg);
-// draw the SVG for the trackball
+torusKnotUI.arcballHost.appendChild(svg);
+// draw the SVG for the arcball
 type Axis = 'x' | 'y' | 'z';
 
 const ringDefinitions: { axis: Axis; color: string }[] = [
@@ -378,7 +378,7 @@ function rotateCamera(axis: Vec3Arg, angle: number) {
     cameraUp = vec3.normalize(vec3.cross(cameraBack, right));
 }
 
-// trackball ringPoints
+// arcball ringPoints
 // Ring,        Plane,  Fixed coordinate
 // X, red	    YZ	    X = 0
 // Y, green	    XZ	    Y = 0
@@ -391,13 +391,13 @@ function ringPoint(axis: Axis, angle: number): Vec3Arg {
     if (axis === 'y') return [s, 0, c];
     return [c, s, 0];
 }
-// update trackball (projection)
-function updateTrackball() {
-    // draws a new trackball with every new frame
+// update arcball (projection)
+function updatearcball() {
+    // draws a new arcball with every new frame
     const right = getCameraRight();
     const sampleCount = 64;
-    const center = TRACKBALL_SIZE / 2;
-    const radius = TRACKBALL_SIZE / 2 - TRACKBALL_MARGIN;
+    const center = ARCBALL_SIZE / 2;
+    const radius = ARCBALL_SIZE / 2 - ARCBALL_MARGIN;
 
     for (const ring of rings) {
         const commands: string[] = [];
@@ -619,12 +619,12 @@ canvas.addEventListener('lostpointercapture', (event) => {
 //#region Run application
 function frame(time: number) {
     updateKeyboardOrbit(time);
-    // the trackball rings are only shown (and redrawn) in arcball mode
+    // the arcball rings are only shown (and redrawn) in arcball mode
     if (torusKnotUI.params.mode === 'arcball') {
-        torusKnotUI.trackballHost.style.display = 'flex';
-        updateTrackball();
+        torusKnotUI.arcballHost.style.display = 'flex';
+        updatearcball();
     } else {
-        torusKnotUI.trackballHost.style.display = 'none';
+        torusKnotUI.arcballHost.style.display = 'none';
     }
     
     torusKnotUI.fpsTick();

@@ -25,8 +25,8 @@ export class TorusKnotUI {
     private prevMilli: number;
     private fpsBindingText;
     private vertexBinding;
-    // trackball UI
-    public readonly trackballHost: HTMLDivElement;
+    // Arcball UI
+    public readonly arcballHost: HTMLDivElement;
 
     constructor(maxSegments: number, maxTubeSegments: number) {
         this.maxSegments = maxSegments;
@@ -132,10 +132,10 @@ export class TorusKnotUI {
         modeBinding.on('change', updateModeSliderVisibility);
         updateModeSliderVisibility();   // correct state at startup
 
-        // The trackball rings are a navigation control, so they live inside this folder
+        // The arcball rings are a navigation control, so they live inside this folder
         // (and fold away with it). '.tp-fldv_c' is Tweakpane's folder content element.
-        this.trackballHost = document.createElement('div');
-        Object.assign(this.trackballHost.style, {
+        this.arcballHost = document.createElement('div');
+        Object.assign(this.arcballHost.style, {
             display: 'flex',
             justifyContent: 'center',
             padding: '8px 0',
@@ -143,7 +143,7 @@ export class TorusKnotUI {
         });
         const navigationContent =
             navigationFolder.element.querySelector('.tp-fldv_c') ?? navigationFolder.element;
-        navigationContent.appendChild(this.trackballHost);
+        navigationContent.appendChild(this.arcballHost);
         //#endregion
 
         //#region 3. Rendering information (read-only)
