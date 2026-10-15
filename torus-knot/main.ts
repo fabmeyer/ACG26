@@ -328,11 +328,6 @@ const orbit = { radius: 40 };
 const target: Vec3Arg = [0, 0, 0];
 const worldZ: Vec3Arg = [0, 0, 1];
 
-// perspective projection parameters
-const FIELD_OF_VIEW = Math.PI / 4;   // 45° vertical
-const NEAR_PLANE = 0.1;              // closer geometry is clipped away
-const FAR_PLANE = 100;               // geometry further away is clipped away
-
 // back = right middle finger back
 let cameraBack: Vec3Arg = [1, 0, 0];
 // up = right index finger up
@@ -361,12 +356,19 @@ function rotateVector(
     );
 }
 
-// zoom camera
-const MIN_RADIUS = 5;                 // stay far enough out that the near plane doesn't clip the knot
-const MAX_RADIUS = 0.8 * FAR_PLANE;   // leave room for the knot (radius ≈ 15) inside the far plane
-function zoomBy(steps: number) {    // steps > 0 -> zoom in
+// perspective projection parameters
+let fieldOfView = Math.PI / 4;              // 45° vertical
+const MIN_FIELD_OF_VIEW = Math.PI / 12;     // 15°: maximum zoom in
+const MAX_FIELD_OF_VIEW = Math.PI / 2;      // 90°: maximum zoom out
+const NEAR_PLANE = 0.1;
+const FAR_PLANE = 100;
+
+function zoomBy(steps: number) {             // steps > 0 -> zoom in
     const factor = Math.exp(-steps * 0.1);
-    orbit.radius = Math.min(MAX_RADIUS, Math.max(MIN_RADIUS, orbit.radius * factor));
+    fieldOfView = Math.min(
+        MAX_FIELD_OF_VIEW,
+        Math.max(MIN_FIELD_OF_VIEW, fieldOfView * factor),
+    );
 }
 
 // rotate camera
@@ -504,16 +506,17 @@ function updateKeyboardOrbit(time: number) {
 
     previousTime = time;
 
-    // ride and walk are controlled by sliders only: keys must not move the hidden orbit camera
-    if (torusKnotUI.params.mode !== 'arcball') return;
-
-    // keyboard control for zoom
+        // Zoom is shared by every navigation mode.
     const zoom =
-    Number(pressedKeys.has('Period')) -   // shift + . -> zoom in
-    Number(pressedKeys.has('Comma'));     // shift + , -> zoom out
+        Number(pressedKeys.has('Period')) -   // Shift + . -> zoom in
+        Number(pressedKeys.has('Comma'));     // Shift + , -> zoom out
 
-    if (zoom !== 0) zoomBy(zoom * 8 * deltaTime);   // ~8 steps/second
+    if (zoom !== 0) {
+        zoomBy(zoom * 8 * deltaTime);
+    }
 
+    // Only rotation remains restricted to arcball.
+    if (torusKnotUI.params.mode !== 'arcball') return;
     if (ringDrag !== undefined) return;
 
     // keyboard control for horizontal rotation
@@ -552,8 +555,6 @@ canvas.style.touchAction = 'none';
 // mouse controls for zoom
 canvas.addEventListener('wheel', (event) => {
     event.preventDefault();
-
-    if (torusKnotUI.params.mode !== 'arcball') return;
 
     const scale = event.deltaMode === 1 ? 16    // DOM_DELTA_LINE
                 : event.deltaMode === 2 ? 400   // DOM_DELTA_PAGE
@@ -675,7 +676,12 @@ function frame(time: number) {
     }
 
     const viewProj = mat4.multiply(
-        mat4.perspective(FIELD_OF_VIEW, canvas.width / canvas.height, NEAR_PLANE, FAR_PLANE),
+        mat4.perspective(
+            fieldOfView,
+            canvas.width / canvas.height,
+            NEAR_PLANE,
+            FAR_PLANE,
+        ),
         mat4.lookAt(cam.position, cam.target, cam.up),
     );
 
