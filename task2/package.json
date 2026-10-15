@@ -1,0 +1,27 @@
+{
+  "name": "webgpu-course",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@rollup/pluginutils": "^5.4.0",
+    "@tweakpane/core": "^2.0.5",
+    "@types/node": "^26.1.1",
+    "@webgpu/types": "^0.1.71",
+    "glob": "^13.0.6",
+    "typescript": "^7.0.2",
+    "vite": "^8.1.4",
+    "vite-plugin-glsl": "^1.6.0"
+  },
+  "dependencies": {
+    "tweakpane": "^4.0.5",
+    "webgpu-utils": "^2.1.1",
+    "wgpu-matrix": "^3.4.2"
+  }
+}
