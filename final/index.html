@@ -11,25 +11,30 @@
     canvas[data-mode="rotate"]:active { cursor: grabbing; }
     canvas[data-mode="select"] { cursor: crosshair; }
 
-    #mode {
-      position: fixed; top: 12px; left: 12px;
+    #toolbar { position: fixed; top: 12px; left: 12px; display: flex; gap: 8px; }
+    .group {
       display: flex; padding: 3px; gap: 3px;
       background: #1e2027; border: 1px solid #333844; border-radius: 8px;
     }
-    #mode button {
+    #toolbar button {
       padding: 6px 12px; border: 0; border-radius: 5px;
       background: transparent; color: #c9ccd3; font: inherit; cursor: pointer;
     }
-    #mode button:hover { background: #2a2e38; }
+    #toolbar button:hover { background: #2a2e38; }
     #mode button[aria-pressed="true"] { background: #4a7bd0; color: #fff; }
   </style>
 </head>
 <body>
   <canvas id="gpuCanvas"></canvas>
 
-  <div id="mode" role="group" aria-label="Mouse mode">
-    <button data-mode="rotate" aria-pressed="true" title="Drag to rotate the view">Rotate</button>
-    <button data-mode="select" aria-pressed="false" title="Click a point, drag to change its height">Move points</button>
+  <div id="toolbar">
+    <div id="mode" class="group" role="group" aria-label="Mouse mode">
+      <button data-mode="rotate" aria-pressed="true" title="Drag to rotate the view">Rotate</button>
+      <button data-mode="select" aria-pressed="false" title="Click a point, drag to change its height">Move points</button>
+    </div>
+    <div class="group">
+      <button id="reset" title="Move all control points back to the plane">Reset points</button>
+    </div>
   </div>
 
   <script type="module" src="./src/main.ts"></script>
