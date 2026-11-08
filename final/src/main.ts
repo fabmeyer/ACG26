@@ -65,12 +65,29 @@ const selectionBuffer = device.createBuffer({
 });
 device.queue.writeBuffer(selectionBuffer, 0, selectionData);
 
+// copy of the initial positions, for the reset button
+const initialPoints = net.points.slice();
+
 // re-upload only when the selection or a point changes
-const dragger = new PointDragger(canvas, camera, net, () => {
+function uploadPoints() {
   device.queue.writeBuffer(controlPointBuffer, 0, net.points);
   selectionData[0] = dragger.selected;
   device.queue.writeBuffer(selectionBuffer, 0, selectionData);
-});
+}
+
+const dragger = new PointDragger(canvas, camera, net, uploadPoints);
+
+function clearSelection() {
+  dragger.selected = -1;
+  uploadPoints();
+}
+
+function resetPoints() {
+  net.points.set(initialPoints);
+  clearSelection();
+}
+
+document.getElementById('reset')!.addEventListener('click', resetPoints);
 
 // ---------------------------------------------------------
 // Mouse mode
@@ -83,6 +100,7 @@ function setMode(mode: Mode) {
   camera.enabled = mode === 'rotate';
   dragger.enabled = mode === 'select';
   canvas.dataset.mode = mode;
+  if (mode === 'rotate') clearSelection(); // no highlight while rotating
   modeButtons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === mode)));
 }
 
