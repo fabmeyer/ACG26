@@ -5,6 +5,7 @@ import { flatControlNet } from './controlNet.ts';
 import { PointDragger } from './pointDrag.ts';
 import planeCode from './shaders/plane.wgsl?raw';
 import pointsCode from './shaders/points.wgsl?raw';
+import stemsCode from './shaders/stems.wgsl?raw';
 
 const canvas = document.getElementById('gpuCanvas') as HTMLCanvasElement;
 const { device, context, format } = await initWebGPU(canvas);
@@ -164,6 +165,17 @@ const pointsPipeline = device.createRenderPipeline({
   depthStencil: { format: 'depth24plus', depthWriteEnabled: false, depthCompare: 'always' },
 });
 
+// red line from each point down to the plane
+const stemsModule = device.createShaderModule({ label: 'stems', code: stemsCode });
+const stemsPipeline = device.createRenderPipeline({
+  label: 'stems',
+  layout: 'auto',
+  vertex: { module: stemsModule, entryPoint: 'vs_main' },
+  fragment: { module: stemsModule, entryPoint: 'fs_main', targets: [{ format }] },
+  primitive: { topology: 'line-list' },
+  depthStencil: { format: 'depth24plus', depthWriteEnabled: false, depthCompare: 'less' },
+});
+
 const planeBindGroup = device.createBindGroup({
   layout: planePipeline.getBindGroupLayout(0),
   entries: [{ binding: 0, resource: { buffer: cameraBuffer } }],
@@ -174,6 +186,13 @@ const pointsBindGroup = device.createBindGroup({
     { binding: 0, resource: { buffer: cameraBuffer } },
     { binding: 1, resource: { buffer: controlPointBuffer } },
     { binding: 2, resource: { buffer: selectionBuffer } },
+  ],
+});
+const stemsBindGroup = device.createBindGroup({
+  layout: stemsPipeline.getBindGroupLayout(0),
+  entries: [
+    { binding: 0, resource: { buffer: cameraBuffer } },
+    { binding: 1, resource: { buffer: controlPointBuffer } },
   ],
 });
 
@@ -209,6 +228,10 @@ function frame() {
   pass.setVertexBuffer(0, planeVertexBuffer);
   pass.setIndexBuffer(planeIndexBuffer, 'uint32');
   pass.drawIndexed(planeIndices.length);
+
+  pass.setPipeline(stemsPipeline);
+  pass.setBindGroup(0, stemsBindGroup);
+  pass.draw(2, pointCount);
 
   pass.setPipeline(pointsPipeline);
   pass.setBindGroup(0, pointsBindGroup);
