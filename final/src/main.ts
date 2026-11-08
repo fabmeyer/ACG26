@@ -2,6 +2,7 @@ import { quat } from 'wgpu-matrix';
 import { initWebGPU } from './webgpu-init.ts';
 import { ArcballCamera } from './arcball.ts';
 import { flatControlNet } from './controlNet.ts';
+import { PointDragger } from './pointDrag.ts';
 import planeCode from './shaders/plane.wgsl?raw';
 import pointsCode from './shaders/points.wgsl?raw';
 
@@ -54,6 +55,39 @@ const controlPointBuffer = device.createBuffer({
   usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
 });
 device.queue.writeBuffer(controlPointBuffer, 0, net.points);
+
+// selected point for highlighting
+const selectionData = new Int32Array([-1, 0, 0, 0]);
+const selectionBuffer = device.createBuffer({
+  label: 'selection',
+  size: selectionData.byteLength,
+  usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+});
+device.queue.writeBuffer(selectionBuffer, 0, selectionData);
+
+// re-upload only when the selection or a point changes
+const dragger = new PointDragger(canvas, camera, net, () => {
+  device.queue.writeBuffer(controlPointBuffer, 0, net.points);
+  selectionData[0] = dragger.selected;
+  device.queue.writeBuffer(selectionBuffer, 0, selectionData);
+});
+
+// ---------------------------------------------------------
+// Mouse mode
+// ---------------------------------------------------------
+
+type Mode = 'rotate' | 'select';
+const modeButtons = document.querySelectorAll<HTMLButtonElement>('#mode button');
+
+function setMode(mode: Mode) {
+  camera.enabled = mode === 'rotate';
+  dragger.enabled = mode === 'select';
+  canvas.dataset.mode = mode;
+  modeButtons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === mode)));
+}
+
+modeButtons.forEach((b) => b.addEventListener('click', () => setMode(b.dataset.mode as Mode)));
+setMode('rotate');
 
 // ---------------------------------------------------------
 // Plane
@@ -121,6 +155,7 @@ const pointsBindGroup = device.createBindGroup({
   entries: [
     { binding: 0, resource: { buffer: cameraBuffer } },
     { binding: 1, resource: { buffer: controlPointBuffer } },
+    { binding: 2, resource: { buffer: selectionBuffer } },
   ],
 });
 
