@@ -5,6 +5,7 @@ export class ArcballCamera {
   distance: number;
   orientation: Quat;
   fovY = Math.PI / 4;
+  enabled = true;
 
   private dragging = false;
   private last: Vec3 = vec3.create();
@@ -15,6 +16,7 @@ export class ArcballCamera {
     this.orientation = opts.orientation ?? quat.identity();
 
     canvas.addEventListener('pointerdown', (e) => {
+      if (!this.enabled) return;
       canvas.setPointerCapture(e.pointerId);
       this.dragging = true;
       this.last = this.toBall(canvas, e);
@@ -34,7 +36,6 @@ export class ArcballCamera {
     }, { passive: false });
   }
 
-  // maps a pointer position onto the unit ball (camera space)
   private toBall(canvas: HTMLCanvasElement, e: PointerEvent): Vec3 {
     const r = canvas.getBoundingClientRect();
     const s = Math.min(r.width, r.height) / 2;
@@ -45,7 +46,6 @@ export class ArcballCamera {
     return vec3.normalize(vec3.fromValues(x, y, z));
   }
 
-  // rotates the scene from ball point a to b, i.e. the camera by the inverse
   private rotate(a: Vec3, b: Vec3) {
     const axis = vec3.cross(a, b);
     if (vec3.length(axis) < 1e-6) return;
