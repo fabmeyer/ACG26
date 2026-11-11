@@ -3,7 +3,8 @@ import { initWebGPU } from './webgpu-init.ts';
 import { ArcballCamera } from './arcball.ts';
 import { flatControlNet } from './controlNet.ts';
 import { PointDragger } from './pointDrag.ts';
-import planeCode from './shaders/plane.wgsl?raw';
+import tessellateCode from './shaders/tessellate.wgsl?raw';
+import surfaceCode from './shaders/surface.wgsl?raw';
 import pointsCode from './shaders/points.wgsl?raw';
 import stemsCode from './shaders/stems.wgsl?raw';
 
@@ -49,7 +50,7 @@ const cameraBuffer = device.createBuffer({
 const net = flatControlNet();
 const pointCount = net.countU * net.countV;
 
-// storage buffer, so a later compute pass can read the same data
+// storage buffer, read by the compute pass and the point/line shaders
 const controlPointBuffer = device.createBuffer({
   label: 'control points',
   size: net.points.byteLength,
@@ -69,9 +70,13 @@ device.queue.writeBuffer(selectionBuffer, 0, selectionData);
 // copy of the initial positions, for the reset button
 const initialPoints = net.points.slice();
 
+// the surface is only re-evaluated when the control points changed
+let surfaceDirty = true;
+
 // re-upload only when the selection or a point changes
 function uploadPoints() {
   device.queue.writeBuffer(controlPointBuffer, 0, net.points);
+  surfaceDirty = true;
   selectionData[0] = dragger.selected;
   device.queue.writeBuffer(selectionBuffer, 0, selectionData);
 }
@@ -109,48 +114,81 @@ modeButtons.forEach((b) => b.addEventListener('click', () => setMode(b.dataset.m
 setMode('rotate');
 
 // ---------------------------------------------------------
-// Plane
+// Surface
 // ---------------------------------------------------------
 
-const corner = (i: number, j: number) => {
-  const k = (j * net.countU + i) * 4;
-  return Array.from(net.points.subarray(k, k + 4));
-};
-const last = { i: net.countU - 1, j: net.countV - 1 };
-const planeVertices = new Float32Array([
-  ...corner(0, 0), ...corner(last.i, 0), ...corner(0, last.j), ...corner(last.i, last.j),
+// samples per direction: the surface is a RES_U x RES_V grid of points
+const RES_U = 128;
+const RES_V = 128;
+
+// params for the compute shader (struct Params in tessellate.wgsl, 8 x u32)
+const paramsData = new Uint32Array([
+  net.countU, net.countV, net.p, net.q, RES_U, RES_V, net.knotsU.length, 0,
 ]);
-const planeIndices = new Uint32Array([0, 1, 3, 0, 3, 2]);
-
-const planeVertexBuffer = device.createBuffer({
-  label: 'plane vertices',
-  size: planeVertices.byteLength,
-  usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+const paramsBuffer = device.createBuffer({
+  label: 'surface params',
+  size: paramsData.byteLength,
+  usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
 });
-device.queue.writeBuffer(planeVertexBuffer, 0, planeVertices);
+device.queue.writeBuffer(paramsBuffer, 0, paramsData);
 
-const planeIndexBuffer = device.createBuffer({
-  label: 'plane indices',
-  size: planeIndices.byteLength,
+// both knot vectors in one buffer: U first, V starts at index knotsU.length
+const knotData = new Float32Array([...net.knotsU, ...net.knotsV]);
+const knotBuffer = device.createBuffer({
+  label: 'knots',
+  size: knotData.byteLength,
+  usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+});
+device.queue.writeBuffer(knotBuffer, 0, knotData);
+
+// written by the compute pass (STORAGE), read by the render pass (VERTEX)
+const positionBuffer = device.createBuffer({
+  label: 'surface positions',
+  size: RES_U * RES_V * 16, // one vec4f (16 bytes) per sample
+  usage: GPUBufferUsage.STORAGE | GPUBufferUsage.VERTEX,
+});
+
+// two triangles per grid cell; the patch is open, so no wrap-around like the torus knot
+const surfaceIndices = new Uint32Array((RES_U - 1) * (RES_V - 1) * 6);
+for (let j = 0, k = 0; j < RES_V - 1; j++) {
+  for (let i = 0; i < RES_U - 1; i++, k += 6) {
+    const a = j * RES_U + i; // (i, j)
+    const b = a + 1;         // (i + 1, j)
+    const c = a + RES_U;     // (i, j + 1)
+    const d = c + 1;         // (i + 1, j + 1)
+    surfaceIndices.set([a, b, d, a, d, c], k);
+  }
+}
+const surfaceIndexBuffer = device.createBuffer({
+  label: 'surface indices',
+  size: surfaceIndices.byteLength,
   usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST,
 });
-device.queue.writeBuffer(planeIndexBuffer, 0, planeIndices);
-
+device.queue.writeBuffer(surfaceIndexBuffer, 0, surfaceIndices);
 
 // ---------------------------------------------------------
 // Pipelines
 // ---------------------------------------------------------
 
-const planeModule = device.createShaderModule({ label: 'plane', code: planeCode });
-const planePipeline = device.createRenderPipeline({
-  label: 'plane',
+const tessellatePipeline = device.createComputePipeline({
+  label: 'tessellate',
+  layout: 'auto',
+  compute: {
+    module: device.createShaderModule({ label: 'tessellate', code: tessellateCode }),
+    entryPoint: 'cs_main',
+  },
+});
+
+const surfaceModule = device.createShaderModule({ label: 'surface', code: surfaceCode });
+const surfacePipeline = device.createRenderPipeline({
+  label: 'surface',
   layout: 'auto',
   vertex: {
-    module: planeModule,
+    module: surfaceModule,
     entryPoint: 'vs_main',
     buffers: [{ arrayStride: 16, attributes: [{ shaderLocation: 0, offset: 0, format: 'float32x4' }] }],
   },
-  fragment: { module: planeModule, entryPoint: 'fs_main', targets: [{ format }] },
+  fragment: { module: surfaceModule, entryPoint: 'fs_main', targets: [{ format }] },
   primitive: { topology: 'triangle-list', cullMode: 'none' },
   depthStencil: { format: 'depth24plus', depthWriteEnabled: true, depthCompare: 'less' },
 });
@@ -165,7 +203,7 @@ const pointsPipeline = device.createRenderPipeline({
   depthStencil: { format: 'depth24plus', depthWriteEnabled: false, depthCompare: 'always' },
 });
 
-// red line from each point down to the plane
+// red line from each point down to z = 0 (the starting height)
 const stemsModule = device.createShaderModule({ label: 'stems', code: stemsCode });
 const stemsPipeline = device.createRenderPipeline({
   label: 'stems',
@@ -176,8 +214,17 @@ const stemsPipeline = device.createRenderPipeline({
   depthStencil: { format: 'depth24plus', depthWriteEnabled: false, depthCompare: 'less' },
 });
 
-const planeBindGroup = device.createBindGroup({
-  layout: planePipeline.getBindGroupLayout(0),
+const tessellateBindGroup = device.createBindGroup({
+  layout: tessellatePipeline.getBindGroupLayout(0),
+  entries: [
+    { binding: 0, resource: { buffer: paramsBuffer } },
+    { binding: 1, resource: { buffer: controlPointBuffer } },
+    { binding: 2, resource: { buffer: knotBuffer } },
+    { binding: 3, resource: { buffer: positionBuffer } },
+  ],
+});
+const surfaceBindGroup = device.createBindGroup({
+  layout: surfacePipeline.getBindGroupLayout(0),
   entries: [{ binding: 0, resource: { buffer: cameraBuffer } }],
 });
 const pointsBindGroup = device.createBindGroup({
@@ -208,6 +255,17 @@ function frame() {
   device.queue.writeBuffer(cameraBuffer, 0, cameraData);
 
   const encoder = device.createCommandEncoder();
+
+  // evaluate the surface again, but only if a control point changed
+  if (surfaceDirty) {
+    const compute = encoder.beginComputePass();
+    compute.setPipeline(tessellatePipeline);
+    compute.setBindGroup(0, tessellateBindGroup);
+    compute.dispatchWorkgroups(Math.ceil(RES_U / 8), Math.ceil(RES_V / 8));
+    compute.end();
+    surfaceDirty = false;
+  }
+
   const pass = encoder.beginRenderPass({
     colorAttachments: [{
       view: context.getCurrentTexture().createView(),
@@ -223,11 +281,11 @@ function frame() {
     },
   });
 
-  pass.setPipeline(planePipeline);
-  pass.setBindGroup(0, planeBindGroup);
-  pass.setVertexBuffer(0, planeVertexBuffer);
-  pass.setIndexBuffer(planeIndexBuffer, 'uint32');
-  pass.drawIndexed(planeIndices.length);
+  pass.setPipeline(surfacePipeline);
+  pass.setBindGroup(0, surfaceBindGroup);
+  pass.setVertexBuffer(0, positionBuffer);
+  pass.setIndexBuffer(surfaceIndexBuffer, 'uint32');
+  pass.drawIndexed(surfaceIndices.length);
 
   pass.setPipeline(stemsPipeline);
   pass.setBindGroup(0, stemsBindGroup);
